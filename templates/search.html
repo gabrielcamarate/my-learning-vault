@@ -1,0 +1,40 @@
+{% extends "layout.html" %}
+
+{% block title %}Search · My Learning Vault{% endblock %}
+
+{% block content %}
+<section class="shell detail-shell">
+    <div class="detail-header">
+        <div>
+            <p class="eyebrow">Search</p>
+            <h1>Results for "{{ query }}"</h1>
+            <p class="hero-copy narrow">Search scans course names, module names, lesson names, and the notes saved inside your vault.</p>
+        </div>
+    </div>
+
+    {% if query and results %}
+    <div class="stack-list">
+        {% for result in results %}
+        <a class="stack-item search-result" href="{{ url_for('course_detail', course_id=result.course_id, module_id=result.module_id, lesson_id=result.id, q=query) }}">
+            <div>
+                <p class="meta">{{ result.course_title }} · {{ result.module_title }}</p>
+                <h3>{{ result.title }}</h3>
+                <p>{{ result.excerpt }}</p>
+            </div>
+            <span>Open lesson</span>
+        </a>
+        {% endfor %}
+    </div>
+    {% elif query %}
+    <div class="empty-state">
+        <h2>No results found</h2>
+        <p>Try a more general keyword or create a new course entry with the content you want to save.</p>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <h2>Start with a keyword</h2>
+        <p>Use the search bar to find matches across your vault.</p>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

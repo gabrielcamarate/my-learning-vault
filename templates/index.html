@@ -1,0 +1,138 @@
+{% extends "layout.html" %}
+
+{% block body_class %}home-page{% endblock %}
+
+{% block content %}
+<section class="shell home-shell">
+    <div class="home-heading">
+        <div class="home-icon">🧘</div>
+        <div>
+            <h1>Meus Cursos</h1>
+            <p>Acesso aos cursos em que você está inscrito</p>
+        </div>
+    </div>
+
+    <div class="course-gallery">
+        {% if courses %}
+        {% for course in courses %}
+        <article class="course-poster">
+            {% if course.cover_url %}
+            <a class="poster-cover" href="{{ url_for('course_detail', course_id=course.id) }}" style="background-image: linear-gradient(rgba(0, 0, 0, 0.1), rgba(0, 0, 0, 0.72)), url('{{ course.cover_url }}')">
+                <div class="poster-overlay">
+                    <p class="poster-kicker">Curso</p>
+                    <h3>{{ course.title }}</h3>
+                </div>
+            </a>
+            {% else %}
+            <a class="poster-cover fallback-cover" href="{{ url_for('course_detail', course_id=course.id) }}">
+                <div class="poster-overlay">
+                    <p class="poster-kicker">Curso</p>
+                    <h3>{{ course.title }}</h3>
+                </div>
+            </a>
+            {% endif %}
+            <div class="poster-footer">
+                <span>{{ course.title }}</span>
+                <span class="poster-status">{{ course.module_count }} módulos</span>
+            </div>
+        </article>
+        {% endfor %}
+        {% endif %}
+
+        <article class="course-poster">
+            <button class="add-course-card" id="open-course-modal" type="button">
+                <span class="add-course-plus">+</span>
+                <span class="add-course-title">Adicionar curso</span>
+                <span class="add-course-copy">Crie um novo curso para organizar modulos, aulas e anotacoes.</span>
+            </button>
+        </article>
+    </div>
+</section>
+
+<div class="modal-backdrop" hidden id="course-modal-backdrop">
+    <div aria-labelledby="course-modal-title" aria-modal="true" class="course-modal" role="dialog">
+        <div class="course-modal-header">
+            <div>
+                <p class="eyebrow">Novo curso</p>
+                <h2 id="course-modal-title">Adicionar curso</h2>
+            </div>
+            <button class="modal-close" id="close-course-modal" type="button">×</button>
+        </div>
+
+        <form action="{{ url_for('create_course') }}" class="form-panel modal-form" method="post">
+            <label for="modal-title">Nome do curso</label>
+            <input id="modal-title" name="title" required type="text">
+
+            <label for="modal-description">Descrição</label>
+            <textarea id="modal-description" name="description" required rows="4"></textarea>
+
+            <label for="modal-cover-url">URL da capa</label>
+            <input id="modal-cover-url" name="cover_url" type="url">
+
+            <div class="modal-actions">
+                <button class="button soft" id="cancel-course-modal" type="button">Cancelar</button>
+                <button class="button primary" type="submit">Salvar curso</button>
+            </div>
+        </form>
+
+        <div class="modal-divider"></div>
+
+        <form action="{{ url_for('import_course') }}" class="form-panel modal-form" enctype="multipart/form-data" method="post">
+            <label for="modal-course-folder">Importar pasta do curso</label>
+            <input id="modal-course-folder" multiple name="course_files" required type="file" webkitdirectory directory>
+            <p class="form-help" id="selected-folder-copy">Estrutura esperada: curso > módulos > aulas > anotacoes.md</p>
+            <div class="modal-actions">
+                <button class="button primary" type="submit">Selecionar e importar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const openButton = document.querySelector("#open-course-modal");
+        const closeButton = document.querySelector("#close-course-modal");
+        const cancelButton = document.querySelector("#cancel-course-modal");
+        const backdrop = document.querySelector("#course-modal-backdrop");
+        const titleInput = document.querySelector("#modal-title");
+        const folderInput = document.querySelector("#modal-course-folder");
+        const folderCopy = document.querySelector("#selected-folder-copy");
+
+        function openModal() {
+            backdrop.hidden = false;
+            titleInput.focus();
+        }
+
+        function closeModal() {
+            backdrop.hidden = true;
+        }
+
+        openButton.addEventListener("click", openModal);
+        closeButton.addEventListener("click", closeModal);
+        cancelButton.addEventListener("click", closeModal);
+
+        backdrop.addEventListener("click", function (event) {
+            if (event.target === backdrop) {
+                closeModal();
+            }
+        });
+
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape" && !backdrop.hidden) {
+                closeModal();
+            }
+        });
+
+        folderInput.addEventListener("change", function () {
+            if (!folderInput.files.length) {
+                folderCopy.textContent = "Estrutura esperada: curso > módulos > aulas > anotacoes.md";
+                return;
+            }
+
+            const firstPath = folderInput.files[0].webkitRelativePath || folderInput.files[0].name;
+            const folderName = firstPath.split("/")[0];
+            folderCopy.textContent = `${folderInput.files.length} arquivos selecionados de "${folderName}"`;
+        });
+    });
+</script>
+{% endblock %}

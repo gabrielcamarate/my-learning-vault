@@ -1,0 +1,911 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ course.title }} · My Learning Vault{% endblock %}
+
+{% block content %}
+<section class="shell course-screen">
+    <div class="course-topbar">
+        <div class="course-toplinks">
+            <a href="{{ url_for('index') }}">Home</a>
+            <span>{{ course.title }}</span>
+        </div>
+        <form action="{{ url_for('search') }}" class="course-search" method="get">
+            <input id="course-search-input" name="q" placeholder="Pesquisar em {{ course.title }}" type="search" value="{{ request.args.get('q', '') }}">
+        </form>
+    </div>
+
+    <div class="course-layout">
+        <aside class="course-sidebar">
+            <div class="course-sidecard">
+                <h2>{{ course.title }}</h2>
+                <p>{{ course.description }}</p>
+            </div>
+
+            <div class="course-inline-tools">
+                <form action="{{ url_for('create_module', course_id=course.id) }}" class="inline-create-form is-hidden" id="module-create-form" method="post">
+                    <input id="module-title-input" name="title" placeholder="Nome do módulo" required type="text">
+                    <textarea name="summary" placeholder="Resumo curto do módulo" rows="3"></textarea>
+                    <input id="module-create-position" name="position" type="hidden" value="{{ (modules|length) + 1 }}">
+                    <div class="inline-create-actions">
+                        <button class="button primary" type="submit">Criar módulo</button>
+                        <button class="button soft" id="cancel-module-form" type="button">Cancelar</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="module-nav"></div>
+        </aside>
+
+        <section class="course-main">
+            <div class="course-main-header">
+                <p class="eyebrow">Módulo selecionado</p>
+                <h1 id="selected-module-title">{{ selected_module.title if selected_module else "Nenhum módulo selecionado" }}</h1>
+                <p class="course-main-copy" id="selected-module-summary">
+                    {{ selected_module.summary if selected_module else "Escolha um módulo na barra lateral para abrir as aulas e visualizar as anotações." }}
+                </p>
+                <form action="{{ url_for('create_lesson', module_id=selected_module.id if selected_module else 0) }}" class="inline-create-form is-hidden" enctype="multipart/form-data" id="lesson-create-form" method="post">
+                    <input id="lesson-create-title" name="title" placeholder="Nome da aula" required type="text">
+                    <textarea id="lesson-create-notes" name="notes" placeholder="Escreva em markdown..." required rows="8"></textarea>
+                    <label for="lesson-create-attachment-file">Anexo da aula</label>
+                    <input id="lesson-create-attachment-file" name="attachment_file" type="file">
+                    <input id="lesson-create-attachment-label" name="attachment_label" placeholder="Nome para exibir o anexo (opcional)" type="text">
+                    <p class="form-help">Adicione um PDF, imagem, documento ou outro material complementar da aula.</p>
+                    <input id="lesson-create-position" name="position" type="hidden" value="{{ (selected_lessons|length) + 1 if selected_module else 1 }}">
+                    <div class="inline-create-actions">
+                        <button class="button primary" type="submit">Criar aula</button>
+                        <button class="button soft" id="cancel-lesson-form" type="button">Cancelar</button>
+                    </div>
+                </form>
+            </div>
+
+            <article class="lesson-workspace {% if not selected_lesson %}is-hidden{% endif %}" id="lesson-workspace">
+                <div class="lesson-workspace-header">
+                    <div>
+                        <p class="featured-meta">AULA SELECIONADA</p>
+                        <h2 id="selected-lesson-title">{{ selected_lesson.title if selected_lesson else "" }}</h2>
+                    </div>
+                    <div class="action-row">
+                        <button class="button soft" id="view-mode-button" type="button">Visualização</button>
+                        <button class="button primary" id="edit-mode-button" type="button">Edição</button>
+                    </div>
+                </div>
+
+                <div id="lesson-view-mode">
+                    <div class="lesson-note-view">
+                        <div class="note-copy prose markdown-content" id="selected-lesson-notes">{{ selected_lesson.rendered_notes | safe if selected_lesson else "" }}</div>
+                    </div>
+
+                    <div class="lesson-attachment {% if not selected_lesson or not selected_lesson.attachment_url %}is-hidden{% endif %}" id="selected-lesson-attachment">
+                        <div class="lesson-attachment-copy">
+                            <p class="lesson-attachment-eyebrow">Material complementar</p>
+                            <strong id="selected-attachment-label">{{ selected_lesson.attachment_label or "Anexo da aula" if selected_lesson else "Anexo da aula" }}</strong>
+                            <span id="selected-attachment-subcopy">Arquivo anexado a esta aula para consulta rápida.</span>
+                        </div>
+                        <a class="button soft lesson-attachment-button" href="{{ selected_lesson.attachment_url or '#' if selected_lesson else '#' }}" id="selected-attachment-link" rel="noreferrer" target="_blank">Abrir anexo</a>
+                    </div>
+                </div>
+
+                <form action="{{ url_for('inline_update_lesson', lesson_id=selected_lesson.id if selected_lesson else 0) }}" class="lesson-edit-form is-hidden" enctype="multipart/form-data" id="lesson-edit-mode" method="post">
+                    <label for="lesson-title">Título da aula</label>
+                    <input id="lesson-title" name="title" required type="text" value="{{ selected_lesson.title if selected_lesson else '' }}">
+
+                    <label for="lesson-notes">Anotações</label>
+                    <textarea id="lesson-notes" name="notes" required rows="16">{{ selected_lesson.notes if selected_lesson else '' }}</textarea>
+
+                    <label for="lesson-attachment-file">Anexo da aula</label>
+                    <input id="lesson-attachment-file" name="attachment_file" type="file">
+
+                    <label for="lesson-attachment-label">Nome para exibir o anexo</label>
+                    <input id="lesson-attachment-label" name="attachment_label" type="text" value="{{ selected_lesson.attachment_label or '' if selected_lesson else '' }}">
+                    <p class="form-help">Envie um arquivo para anexar esse material à aula. Se você enviar outro arquivo, ele substitui o atual.</p>
+
+                    <div class="course-actions-footer">
+                        <button class="button primary" type="submit">Salvar alterações</button>
+                        <button class="button soft" id="cancel-edit-mode" type="button">Cancelar</button>
+                    </div>
+                </form>
+            </article>
+
+            <div class="empty-state {% if selected_lesson %}is-hidden{% endif %}" id="course-empty-state">
+                <h2>Nenhuma aula selecionada</h2>
+                <p>Escolha um módulo na barra lateral e clique em uma aula para abrir suas anotações.</p>
+            </div>
+
+            <div class="course-actions-footer" id="course-actions-footer">
+                <form action="{{ url_for('delete_course', course_id=course.id) }}" id="delete-course-form" method="post">
+                    <button class="button danger" id="delete-course-button" type="button">Delete course</button>
+                </form>
+            </div>
+        </section>
+    </div>
+</section>
+
+<div class="modal-backdrop" hidden id="confirm-modal-backdrop">
+    <div aria-labelledby="confirm-modal-title" aria-modal="true" class="course-modal confirm-modal" role="dialog">
+        <div class="course-modal-header">
+            <div>
+                <p class="eyebrow">Confirmação</p>
+                <h2 id="confirm-modal-title">Confirmar ação</h2>
+            </div>
+            <button class="modal-close" id="close-confirm-modal" type="button">×</button>
+        </div>
+        <div class="form-panel modal-form confirm-modal-body">
+            <p id="confirm-modal-message">Tem certeza?</p>
+            <div class="modal-actions">
+                <button class="button soft" id="cancel-confirm-modal" type="button">Cancelar</button>
+                <button class="button danger" id="accept-confirm-modal" type="button">Confirmar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="context-menu" hidden id="course-context-menu">
+    <button class="context-menu-item" data-action="add-module" type="button">Adicionar módulo</button>
+    <button class="context-menu-item is-module-action" data-action="add-lesson" type="button">Adicionar aula</button>
+    <button class="context-menu-item danger is-module-action" data-action="delete-module" type="button">Excluir módulo</button>
+    <button class="context-menu-item danger is-lesson-action" data-action="delete-lesson" type="button">Excluir aula</button>
+</div>
+
+<script id="course-data" type="application/json">{{ modules_payload | tojson }}</script>
+<script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const courseScreen = document.querySelector(".course-screen");
+        const moduleNav = document.querySelector(".module-nav");
+        const courseSearchInput = document.querySelector("#course-search-input");
+        const moduleTitle = document.querySelector("#selected-module-title");
+        const moduleSummary = document.querySelector("#selected-module-summary");
+        const lessonWorkspace = document.querySelector("#lesson-workspace");
+        const emptyState = document.querySelector("#course-empty-state");
+        const viewMode = document.querySelector("#lesson-view-mode");
+        const editMode = document.querySelector("#lesson-edit-mode");
+        const viewButton = document.querySelector("#view-mode-button");
+        const editButton = document.querySelector("#edit-mode-button");
+        const cancelButton = document.querySelector("#cancel-edit-mode");
+        const selectedLessonTitle = document.querySelector("#selected-lesson-title");
+        const selectedLessonNotes = document.querySelector("#selected-lesson-notes");
+        const selectedAttachment = document.querySelector("#selected-lesson-attachment");
+        const selectedAttachmentLabel = document.querySelector("#selected-attachment-label");
+        const selectedAttachmentLink = document.querySelector("#selected-attachment-link");
+        const lessonTitleInput = document.querySelector("#lesson-title");
+        const lessonNotesInput = document.querySelector("#lesson-notes");
+        const lessonAttachmentFileInput = document.querySelector("#lesson-attachment-file");
+        const lessonAttachmentLabelInput = document.querySelector("#lesson-attachment-label");
+        const editForm = document.querySelector("#lesson-edit-mode");
+        const deleteCourseForm = document.querySelector("#delete-course-form");
+        const deleteCourseButton = document.querySelector("#delete-course-button");
+        const moduleCreateForm = document.querySelector("#module-create-form");
+        const cancelModuleFormButton = document.querySelector("#cancel-module-form");
+        const moduleTitleInput = document.querySelector("#module-title-input");
+        const moduleCreatePositionInput = document.querySelector("#module-create-position");
+        const lessonCreateForm = document.querySelector("#lesson-create-form");
+        const cancelLessonFormButton = document.querySelector("#cancel-lesson-form");
+        const lessonCreateTitleInput = document.querySelector("#lesson-create-title");
+        const lessonCreateAttachmentFileInput = document.querySelector("#lesson-create-attachment-file");
+        const lessonCreateAttachmentLabelInput = document.querySelector("#lesson-create-attachment-label");
+        const lessonCreatePositionInput = document.querySelector("#lesson-create-position");
+        const confirmBackdrop = document.querySelector("#confirm-modal-backdrop");
+        const confirmCloseButton = document.querySelector("#close-confirm-modal");
+        const confirmCancelButton = document.querySelector("#cancel-confirm-modal");
+        const confirmAcceptButton = document.querySelector("#accept-confirm-modal");
+        const confirmMessage = document.querySelector("#confirm-modal-message");
+        const contextMenu = document.querySelector("#course-context-menu");
+        const modules = JSON.parse(document.querySelector("#course-data").textContent);
+        const urlSearchParams = new URLSearchParams(window.location.search);
+
+        let activeModuleId = {{ selected_module.id if selected_module else "null" }};
+        let activeLessonId = {{ selected_lesson.id if selected_lesson else "null" }};
+        let confirmAction = null;
+        let activeSearchTerm = (urlSearchParams.get("q") || "").trim();
+        let draggedModuleId = null;
+        let draggedLessonId = null;
+        let contextModuleId = null;
+        let contextLessonId = null;
+
+        function showViewMode() {
+            viewMode.classList.remove("is-hidden");
+            editMode.classList.add("is-hidden");
+        }
+
+        function closeCreateForms() {
+            moduleCreateForm.classList.add("is-hidden");
+            lessonCreateForm.classList.add("is-hidden");
+        }
+
+        function openModuleCreateForm() {
+            closeCreateForms();
+            moduleCreateForm.classList.remove("is-hidden");
+            moduleTitleInput.focus();
+        }
+
+        function openLessonCreateForm() {
+            const module = getActiveModule();
+            if (!module) {
+                return;
+            }
+            closeCreateForms();
+            activeLessonId = null;
+            renderModuleNav();
+            syncMainPanel();
+            emptyState.classList.add("is-hidden");
+            lessonCreateForm.classList.remove("is-hidden");
+            lessonCreateTitleInput.focus();
+        }
+
+        function closeContextMenu() {
+            contextMenu.hidden = true;
+            contextModuleId = null;
+            contextLessonId = null;
+        }
+
+        function openContextMenu(x, y, options) {
+            contextModuleId = options.moduleId || null;
+            contextLessonId = options.lessonId || null;
+
+            contextMenu.querySelectorAll(".is-module-action").forEach(function (item) {
+                item.hidden = !contextModuleId;
+            });
+            contextMenu.querySelectorAll(".is-lesson-action").forEach(function (item) {
+                item.hidden = !contextLessonId;
+            });
+
+            contextMenu.hidden = false;
+            const rect = contextMenu.getBoundingClientRect();
+            const left = Math.min(x, window.innerWidth - rect.width - 12);
+            const top = Math.min(y, window.innerHeight - rect.height - 12);
+            contextMenu.style.left = `${left}px`;
+            contextMenu.style.top = `${top}px`;
+        }
+
+        function openConfirmModal(message, action) {
+            confirmMessage.textContent = message;
+            confirmAction = action;
+            confirmBackdrop.hidden = false;
+            confirmAcceptButton.focus();
+        }
+
+        function closeConfirmModal() {
+            confirmBackdrop.hidden = true;
+            confirmAction = null;
+        }
+
+        function showEditMode() {
+            if (!activeLessonId) {
+                return;
+            }
+            viewMode.classList.add("is-hidden");
+            editMode.classList.remove("is-hidden");
+        }
+
+        function getActiveModule() {
+            return modules.find((module) => module.id === activeModuleId) || null;
+        }
+
+        function getActiveLesson() {
+            const module = getActiveModule();
+            if (!module) {
+                return null;
+            }
+            return module.lessons.find((lesson) => lesson.id === activeLessonId) || null;
+        }
+
+        function renderLessons(module) {
+            if (!module.lessons.length) {
+                return `
+                    <div class="module-lessons-inline" data-module-panel="${module.id}">
+                        <div class="module-lesson-empty">Sem aulas neste módulo.</div>
+                    </div>
+                `;
+            }
+
+            return `
+                <div class="module-lessons-inline" data-module-panel="${module.id}">
+                    ${module.lessons.map((lesson) => `
+                        <button class="module-lesson-link ${lesson.id === activeLessonId ? "active" : ""}" data-lesson-id="${lesson.id}" draggable="true" type="button">
+                            <span class="module-lesson-icon">/</span>
+                            <span>${lesson.title}</span>
+                            <span class="drag-handle" aria-hidden="true">⋮⋮</span>
+                        </button>
+                    `).join("")}
+                </div>
+            `;
+        }
+
+        function renderModuleNav() {
+            moduleNav.innerHTML = modules.map((module) => `
+                <div class="module-group ${module.id === activeModuleId ? "active" : ""}">
+                    <button class="module-link ${module.id === activeModuleId ? "active" : ""}" data-module-id="${module.id}" draggable="true" type="button">
+                        <span class="module-link-icon">▱</span>
+                        <span class="module-link-title">${module.title}</span>
+                        <span class="drag-handle" aria-hidden="true">⋮⋮</span>
+                    </button>
+                    ${module.id === activeModuleId ? renderLessons(module) : ""}
+                </div>
+            `).join("");
+        }
+
+        function persistModuleOrder() {
+            return fetch(`/courses/{{ course.id }}/modules/reorder`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Requested-With": "XMLHttpRequest"
+                },
+                body: JSON.stringify({ module_ids: modules.map((module) => module.id) })
+            });
+        }
+
+        function persistLessonOrder(module) {
+            return fetch(`/modules/${module.id}/lessons/reorder`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-Requested-With": "XMLHttpRequest"
+                },
+                body: JSON.stringify({ lesson_ids: module.lessons.map((lesson) => lesson.id) })
+            });
+        }
+
+        function clearSearchHighlights(container) {
+            container.querySelectorAll(".search-hit").forEach(function (mark) {
+                const textNode = document.createTextNode(mark.textContent);
+                mark.replaceWith(textNode);
+            });
+        }
+
+        function highlightSearchTerm(container, term) {
+            clearSearchHighlights(container);
+            if (!term) {
+                return null;
+            }
+
+            const lowerTerm = term.toLowerCase();
+            const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, {
+                acceptNode(node) {
+                    if (!node.nodeValue.trim()) {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+
+                    const parentTag = node.parentElement ? node.parentElement.tagName : "";
+                    if (["SCRIPT", "STYLE", "MARK"].includes(parentTag)) {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            });
+
+            const textNodes = [];
+            while (walker.nextNode()) {
+                textNodes.push(walker.currentNode);
+            }
+
+            let firstMatch = null;
+            textNodes.forEach(function (node) {
+                const sourceText = node.nodeValue;
+                const lowerText = sourceText.toLowerCase();
+                if (!lowerText.includes(lowerTerm)) {
+                    return;
+                }
+
+                const fragment = document.createDocumentFragment();
+                let lastIndex = 0;
+                let matchIndex = lowerText.indexOf(lowerTerm);
+
+                while (matchIndex !== -1) {
+                    if (matchIndex > lastIndex) {
+                        fragment.appendChild(document.createTextNode(sourceText.slice(lastIndex, matchIndex)));
+                    }
+
+                    const mark = document.createElement("mark");
+                    mark.className = "search-hit";
+                    mark.textContent = sourceText.slice(matchIndex, matchIndex + term.length);
+                    if (!firstMatch) {
+                        firstMatch = mark;
+                    }
+                    fragment.appendChild(mark);
+
+                    lastIndex = matchIndex + term.length;
+                    matchIndex = lowerText.indexOf(lowerTerm, lastIndex);
+                }
+
+                if (lastIndex < sourceText.length) {
+                    fragment.appendChild(document.createTextNode(sourceText.slice(lastIndex)));
+                }
+
+                node.parentNode.replaceChild(fragment, node);
+            });
+
+            return firstMatch;
+        }
+
+        function applySearchHighlight() {
+            const firstMatch = highlightSearchTerm(selectedLessonNotes, activeSearchTerm);
+            if (firstMatch) {
+                requestAnimationFrame(function () {
+                    firstMatch.scrollIntoView({ behavior: "smooth", block: "center" });
+                });
+            }
+        }
+
+        function updateLessonCreateFormState() {
+            const module = getActiveModule();
+            moduleCreatePositionInput.value = String(modules.length + 1);
+            if (!module) {
+                lessonCreateForm.classList.add("is-hidden");
+                lessonCreateForm.action = "/modules/0/lessons/new";
+                lessonCreatePositionInput.value = "1";
+                return;
+            }
+
+            lessonCreateForm.action = `/modules/${module.id}/lessons/new`;
+            lessonCreatePositionInput.value = String(module.lessons.length + 1);
+        }
+
+        function updateAttachment(lesson) {
+            if (lesson.attachment_url) {
+                selectedAttachment.classList.remove("is-hidden");
+                selectedAttachmentLabel.textContent = lesson.attachment_label || "Anexo da aula";
+                selectedAttachmentLink.href = lesson.attachment_url;
+            } else {
+                selectedAttachment.classList.add("is-hidden");
+                selectedAttachmentLabel.textContent = "Anexo da aula";
+                selectedAttachmentLink.href = "#";
+            }
+        }
+
+        function fillEditForm(lesson) {
+            lessonTitleInput.value = lesson.title;
+            lessonNotesInput.value = lesson.notes;
+            lessonAttachmentFileInput.value = "";
+            lessonAttachmentLabelInput.value = lesson.attachment_label || "";
+            editForm.action = `/lessons/${lesson.id}/inline-update`;
+        }
+
+        function showEmptyState(customTitle, customText) {
+            lessonWorkspace.classList.add("is-hidden");
+            emptyState.classList.remove("is-hidden");
+            moduleTitle.textContent = customTitle || "Nenhum módulo selecionado";
+            moduleSummary.textContent = customText || "Escolha um módulo na barra lateral para abrir as aulas e visualizar as anotações.";
+            updateLessonCreateFormState();
+            showViewMode();
+        }
+
+        function showLessonState(module, lesson) {
+            moduleTitle.textContent = module.title;
+            moduleSummary.textContent = module.summary;
+            selectedLessonTitle.textContent = lesson.title;
+            selectedLessonNotes.innerHTML = lesson.rendered_notes;
+            lessonWorkspace.classList.remove("is-hidden");
+            emptyState.classList.add("is-hidden");
+            updateAttachment(lesson);
+            fillEditForm(lesson);
+            updateLessonCreateFormState();
+            showViewMode();
+            applySearchHighlight();
+        }
+
+        function syncMainPanel() {
+            const module = getActiveModule();
+            const lesson = getActiveLesson();
+
+            if (!module) {
+                showEmptyState();
+                return;
+            }
+
+            if (!lesson) {
+                moduleTitle.textContent = module.title;
+                moduleSummary.textContent = module.summary;
+                lessonWorkspace.classList.add("is-hidden");
+                emptyState.classList.remove("is-hidden");
+                updateLessonCreateFormState();
+                showViewMode();
+                return;
+            }
+
+            showLessonState(module, lesson);
+        }
+
+        async function handleDeleteModule() {
+            const module = getActiveModule();
+            if (!module) {
+                return;
+            }
+            openConfirmModal("Excluir este módulo e todas as aulas dele?", async function () {
+                const response = await fetch(`/modules/${module.id}/delete`, {
+                    method: "POST",
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest"
+                    }
+                });
+
+                if (!response.ok) {
+                    return;
+                }
+
+                const deletedModuleId = module.id;
+                const deletedIndex = modules.findIndex((item) => item.id === deletedModuleId);
+                modules.splice(deletedIndex, 1);
+
+                if (modules.length) {
+                    const fallbackIndex = Math.min(deletedIndex, modules.length - 1);
+                    activeModuleId = modules[fallbackIndex].id;
+                    activeLessonId = modules[fallbackIndex].lessons.length ? modules[fallbackIndex].lessons[0].id : null;
+                } else {
+                    activeModuleId = null;
+                    activeLessonId = null;
+                }
+
+                renderModuleNav();
+                syncMainPanel();
+            });
+        }
+
+        async function handleDeleteLesson() {
+            const module = getActiveModule();
+            const lesson = getActiveLesson();
+            if (!module || !lesson) {
+                return;
+            }
+            openConfirmModal("Excluir esta aula?", async function () {
+                const response = await fetch(`/lessons/${lesson.id}/delete`, {
+                    method: "POST",
+                    headers: {
+                        "X-Requested-With": "XMLHttpRequest"
+                    }
+                });
+
+                if (!response.ok) {
+                    return;
+                }
+
+                const deletedIndex = module.lessons.findIndex((item) => item.id === lesson.id);
+                module.lessons.splice(deletedIndex, 1);
+                if (module.lessons.length) {
+                    const fallbackIndex = Math.min(deletedIndex, module.lessons.length - 1);
+                    activeLessonId = module.lessons[fallbackIndex].id;
+                } else {
+                    activeLessonId = null;
+                }
+
+                renderModuleNav();
+                syncMainPanel();
+            });
+        }
+
+        viewButton.addEventListener("click", showViewMode);
+        editButton.addEventListener("click", showEditMode);
+        cancelButton.addEventListener("click", showViewMode);
+        deleteCourseButton.addEventListener("click", function () {
+            openConfirmModal("Excluir este curso e todo o conteúdo dele?", function () {
+                deleteCourseForm.submit();
+            });
+        });
+        confirmCloseButton.addEventListener("click", closeConfirmModal);
+        confirmCancelButton.addEventListener("click", closeConfirmModal);
+        confirmAcceptButton.addEventListener("click", function () {
+            if (confirmAction) {
+                const action = confirmAction;
+                closeConfirmModal();
+                action();
+            }
+        });
+        confirmBackdrop.addEventListener("click", function (event) {
+            if (event.target === confirmBackdrop) {
+                closeConfirmModal();
+            }
+        });
+        document.addEventListener("keydown", function (event) {
+            if (event.key === "Escape" && !confirmBackdrop.hidden) {
+                closeConfirmModal();
+            }
+            if (event.key === "Escape" && !contextMenu.hidden) {
+                closeContextMenu();
+            }
+        });
+        cancelModuleFormButton.addEventListener("click", function () {
+            moduleCreateForm.classList.add("is-hidden");
+        });
+        cancelLessonFormButton.addEventListener("click", function () {
+            lessonCreateForm.classList.add("is-hidden");
+        });
+        document.addEventListener("click", function (event) {
+            if (!contextMenu.hidden && !contextMenu.contains(event.target)) {
+                closeContextMenu();
+            }
+        });
+        courseScreen.addEventListener("contextmenu", function (event) {
+            const moduleButton = event.target.closest(".module-link");
+            const lessonButton = event.target.closest(".module-lesson-link");
+
+            if (moduleButton) {
+                event.preventDefault();
+                const moduleId = Number(moduleButton.dataset.moduleId);
+                activeModuleId = moduleId;
+                const module = getActiveModule();
+                activeLessonId = module && module.lessons.length ? module.lessons[0].id : null;
+                renderModuleNav();
+                syncMainPanel();
+                openContextMenu(event.clientX, event.clientY, { moduleId });
+                return;
+            }
+
+            if (lessonButton) {
+                event.preventDefault();
+                const lessonId = Number(lessonButton.dataset.lessonId);
+                activeLessonId = lessonId;
+                renderModuleNav();
+                syncMainPanel();
+                openContextMenu(event.clientX, event.clientY, { moduleId: activeModuleId, lessonId });
+                return;
+            }
+
+            const clickedInteractive = event.target.closest("input, textarea, button, a, form");
+            if (!clickedInteractive) {
+                event.preventDefault();
+                openContextMenu(event.clientX, event.clientY, {});
+            }
+        });
+        contextMenu.addEventListener("click", function (event) {
+            const item = event.target.closest(".context-menu-item");
+            if (!item) {
+                return;
+            }
+            const action = item.dataset.action;
+            closeContextMenu();
+            if (action === "add-module") {
+                openModuleCreateForm();
+                return;
+            }
+            if (action === "add-lesson") {
+                if (contextModuleId) {
+                    activeModuleId = contextModuleId;
+                    renderModuleNav();
+                    syncMainPanel();
+                }
+                openLessonCreateForm();
+                return;
+            }
+            if (action === "delete-module" && contextModuleId) {
+                handleDeleteModule();
+                return;
+            }
+            if (action === "delete-lesson" && contextLessonId) {
+                activeLessonId = contextLessonId;
+                renderModuleNav();
+                syncMainPanel();
+                handleDeleteLesson();
+            }
+        });
+        moduleNav.addEventListener("dragstart", function (event) {
+            const moduleButton = event.target.closest(".module-link");
+            if (moduleButton) {
+                draggedModuleId = Number(moduleButton.dataset.moduleId);
+                draggedLessonId = null;
+                moduleButton.classList.add("dragging");
+                event.dataTransfer.effectAllowed = "move";
+                return;
+            }
+
+            const lessonButton = event.target.closest(".module-lesson-link");
+            if (lessonButton) {
+                draggedLessonId = Number(lessonButton.dataset.lessonId);
+                draggedModuleId = activeModuleId;
+                lessonButton.classList.add("dragging");
+                event.dataTransfer.effectAllowed = "move";
+            }
+        });
+
+        moduleNav.addEventListener("dragend", function () {
+            draggedModuleId = null;
+            draggedLessonId = null;
+            moduleNav.querySelectorAll(".dragging, .drop-before, .drop-after").forEach(function (element) {
+                element.classList.remove("dragging", "drop-before", "drop-after");
+            });
+        });
+
+        moduleNav.addEventListener("dragover", function (event) {
+            const lessonTarget = event.target.closest(".module-lesson-link");
+            if (draggedLessonId && lessonTarget) {
+                event.preventDefault();
+                moduleNav.querySelectorAll(".module-lesson-link").forEach((element) => element.classList.remove("drop-before", "drop-after"));
+                const rect = lessonTarget.getBoundingClientRect();
+                const midpoint = rect.top + rect.height / 2;
+                lessonTarget.classList.add(event.clientY < midpoint ? "drop-before" : "drop-after");
+                return;
+            }
+
+            const moduleTarget = event.target.closest(".module-link");
+            if (draggedModuleId && !draggedLessonId && moduleTarget) {
+                event.preventDefault();
+                moduleNav.querySelectorAll(".module-link").forEach((element) => element.classList.remove("drop-before", "drop-after"));
+                const rect = moduleTarget.getBoundingClientRect();
+                const midpoint = rect.top + rect.height / 2;
+                moduleTarget.classList.add(event.clientY < midpoint ? "drop-before" : "drop-after");
+            }
+        });
+
+        moduleNav.addEventListener("drop", async function (event) {
+            const lessonTarget = event.target.closest(".module-lesson-link");
+            if (draggedLessonId && lessonTarget) {
+                event.preventDefault();
+                const module = getActiveModule();
+                const targetLessonId = Number(lessonTarget.dataset.lessonId);
+                if (!module || !targetLessonId || targetLessonId === draggedLessonId) {
+                    return;
+                }
+
+                const draggedIndex = module.lessons.findIndex((lesson) => lesson.id === draggedLessonId);
+                const targetIndex = module.lessons.findIndex((lesson) => lesson.id === targetLessonId);
+                if (draggedIndex === -1 || targetIndex === -1) {
+                    return;
+                }
+
+                const [draggedLesson] = module.lessons.splice(draggedIndex, 1);
+                const targetRect = lessonTarget.getBoundingClientRect();
+                const insertIndex = event.clientY < targetRect.top + targetRect.height / 2 ? targetIndex : targetIndex + 1;
+                module.lessons.splice(insertIndex > draggedIndex ? insertIndex - 1 : insertIndex, 0, draggedLesson);
+                module.lessons.forEach((lesson, index) => {
+                    lesson.position = index + 1;
+                });
+                renderModuleNav();
+                syncMainPanel();
+                await persistLessonOrder(module);
+                return;
+            }
+
+            const moduleTarget = event.target.closest(".module-link");
+            if (draggedModuleId && !draggedLessonId && moduleTarget) {
+                event.preventDefault();
+                const targetModuleId = Number(moduleTarget.dataset.moduleId);
+                if (!targetModuleId || targetModuleId === draggedModuleId) {
+                    return;
+                }
+
+                const draggedIndex = modules.findIndex((module) => module.id === draggedModuleId);
+                const targetIndex = modules.findIndex((module) => module.id === targetModuleId);
+                if (draggedIndex === -1 || targetIndex === -1) {
+                    return;
+                }
+
+                const [draggedModule] = modules.splice(draggedIndex, 1);
+                const targetRect = moduleTarget.getBoundingClientRect();
+                const insertIndex = event.clientY < targetRect.top + targetRect.height / 2 ? targetIndex : targetIndex + 1;
+                modules.splice(insertIndex > draggedIndex ? insertIndex - 1 : insertIndex, 0, draggedModule);
+                modules.forEach((module, index) => {
+                    module.position = index + 1;
+                });
+                renderModuleNav();
+                syncMainPanel();
+                await persistModuleOrder();
+            }
+        });
+
+        moduleNav.addEventListener("click", function (event) {
+            const moduleButton = event.target.closest(".module-link");
+            if (moduleButton) {
+                const moduleId = Number(moduleButton.dataset.moduleId);
+                if (activeModuleId === moduleId) {
+                    activeModuleId = null;
+                    activeLessonId = null;
+                    renderModuleNav();
+                    syncMainPanel();
+                    return;
+                }
+
+                activeModuleId = moduleId;
+                const module = getActiveModule();
+                activeLessonId = module && module.lessons.length ? module.lessons[0].id : null;
+                renderModuleNav();
+                syncMainPanel();
+                return;
+            }
+
+            const lessonButton = event.target.closest(".module-lesson-link");
+            if (lessonButton) {
+                activeLessonId = Number(lessonButton.dataset.lessonId);
+                renderModuleNav();
+                syncMainPanel();
+            }
+        });
+
+        editForm.addEventListener("submit", async function (event) {
+            event.preventDefault();
+            if (!activeLessonId) {
+                return;
+            }
+
+            const response = await fetch(editForm.action, {
+                method: "POST",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest"
+                },
+                body: new FormData(editForm)
+            });
+
+            if (!response.ok) {
+                return;
+            }
+
+            const updatedLesson = await response.json();
+            const module = getActiveModule();
+            const lessonIndex = module.lessons.findIndex((lesson) => lesson.id === updatedLesson.id);
+            if (lessonIndex >= 0) {
+                module.lessons[lessonIndex] = updatedLesson;
+            }
+
+            renderModuleNav();
+            syncMainPanel();
+        });
+
+        moduleCreateForm.addEventListener("submit", async function (event) {
+            event.preventDefault();
+
+            const response = await fetch(moduleCreateForm.action, {
+                method: "POST",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest"
+                },
+                body: new FormData(moduleCreateForm)
+            });
+
+            if (!response.ok) {
+                return;
+            }
+
+            const newModule = await response.json();
+            modules.push(newModule);
+            modules.sort((a, b) => a.position - b.position);
+            activeModuleId = newModule.id;
+            activeLessonId = null;
+            moduleCreateForm.reset();
+            moduleCreatePositionInput.value = String(modules.length + 1);
+            moduleCreateForm.classList.add("is-hidden");
+            renderModuleNav();
+            syncMainPanel();
+        });
+
+        lessonCreateForm.addEventListener("submit", async function (event) {
+            event.preventDefault();
+            const module = getActiveModule();
+            if (!module) {
+                return;
+            }
+
+            const response = await fetch(lessonCreateForm.action, {
+                method: "POST",
+                headers: {
+                    "X-Requested-With": "XMLHttpRequest"
+                },
+                body: new FormData(lessonCreateForm)
+            });
+
+            if (!response.ok) {
+                return;
+            }
+
+            const newLesson = await response.json();
+            module.lessons.push(newLesson);
+            module.lessons.sort((a, b) => a.position - b.position);
+            activeLessonId = newLesson.id;
+            lessonCreateForm.reset();
+            lessonCreateAttachmentFileInput.value = "";
+            lessonCreateAttachmentLabelInput.value = "";
+            lessonCreateForm.classList.add("is-hidden");
+            renderModuleNav();
+            syncMainPanel();
+        });
+
+        renderModuleNav();
+        syncMainPanel();
+        updateLessonCreateFormState();
+
+        courseSearchInput.addEventListener("change", function () {
+            activeSearchTerm = courseSearchInput.value.trim();
+            if (getActiveLesson()) {
+                applySearchHighlight();
+            }
+        });
+    });
+</script>
+{% endblock %}
