@@ -132,87 +132,6 @@ def init_db():
     db.commit()
 
 
-def seed_db():
-    db = get_db()
-    existing = db.execute("SELECT COUNT(*) AS count FROM courses").fetchone()["count"]
-    if existing:
-        return
-
-    db.execute(
-        """
-        INSERT INTO courses (title, description, cover_url)
-        VALUES (?, ?, ?)
-        """,
-        (
-            "Formacao Pentest Profissional",
-            "A structured study vault for cybersecurity modules, lesson notes, and supporting files.",
-            "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=80",
-        ),
-    )
-    course_id = db.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
-
-    modules = [
-        ("Introduction to Information Security", "Core concepts, risks, terminology, and legislation.", 1),
-        ("Linux Terminal Mastery", "Commands, users, networking, editors, and shell productivity.", 2),
-        ("TCP/IP for Pentesters", "Protocols, packet flow, and network analysis fundamentals.", 3),
-    ]
-
-    module_ids = []
-    for title, summary, position in modules:
-        db.execute(
-            """
-            INSERT INTO modules (course_id, title, summary, position)
-            VALUES (?, ?, ?, ?)
-            """,
-            (course_id, title, summary, position),
-        )
-        module_ids.append(db.execute("SELECT last_insert_rowid() AS id").fetchone()["id"])
-
-    lessons = [
-        (
-            module_ids[0],
-            "Security Terminology",
-            "Threats, vulnerabilities, and risks need to be separated clearly. A vulnerability is a weakness, a threat is a potential cause of harm, and risk is the impact plus likelihood.",
-            "Glossary PDF",
-            "https://example.com/security-terminology.pdf",
-            1,
-        ),
-        (
-            module_ids[1],
-            "Introduction to the Terminal",
-            "The terminal becomes more useful when commands are treated like building blocks. Search, filter, redirect, and inspect outputs before memorizing shortcuts.",
-            None,
-            None,
-            1,
-        ),
-        (
-            module_ids[1],
-            "Introduction to Vim",
-            "Vim is powerful once modes make sense. Normal mode is for movement and commands, insert mode is for text, and command mode is for save and quit actions.",
-            "Editor VIM Part 1",
-            "https://example.com/vim-intro.pdf",
-            2,
-        ),
-        (
-            module_ids[2],
-            "Understanding DNS",
-            "DNS translates names into IP addresses, but it also exposes valuable enumeration opportunities during recon and infrastructure mapping.",
-            None,
-            None,
-            1,
-        ),
-    ]
-
-    db.executemany(
-        """
-        INSERT INTO lessons (module_id, title, notes, attachment_label, attachment_url, position)
-        VALUES (?, ?, ?, ?, ?, ?)
-        """,
-        lessons,
-    )
-    db.commit()
-
-
 def query_one_or_404(query, params=()):
     row = get_db().execute(query, params).fetchone()
     if row is None:
@@ -954,7 +873,6 @@ def create_course():
 
 with app.app_context():
     init_db()
-    seed_db()
 
 
 if __name__ == "__main__":
