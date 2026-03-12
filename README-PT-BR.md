@@ -1,6 +1,6 @@
 # My Learning Vault
 
-#### Video Demo:  <URL AQUI>
+#### Video Demo:  https://youtu.be/f7ReU5I-7tU
 
 #### Descricao:
 My Learning Vault e uma aplicacao web para organizar materiais de estudo de forma estruturada, navegavel e pesquisavel. A ideia nasceu de um problema real: ao fazer cursos longos, com modulos, aulas, anotacoes em markdown e arquivos complementares, o conteudo costuma ficar espalhado em muitas pastas locais. O objetivo do projeto foi transformar esse fluxo em uma experiencia unica, mais bonita e mais pratica de usar no navegador.
